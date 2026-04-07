@@ -765,6 +765,121 @@ const CreateMonitorPage = () => {
 				}
 			/>
 
+			<ConfigBox
+				title={t("pages.createMonitor.form.escalation.title")}
+				subtitle={t("pages.createMonitor.form.escalation.description")}
+				rightContent={
+					<Stack spacing={theme.spacing(LAYOUT.MD)}>
+						{/* Escalate after field */}
+						<Controller
+							name="escalationDelay"
+							control={control}
+							render={({ field, fieldState }) => (
+								<TextField
+									{...field}
+									value={field.value ?? 3}
+									onChange={(e) => {
+										const val = e.target.value;
+										field.onChange(val === "" ? 3 : Number(val));
+									}}
+									type="number"
+									fieldLabel="Escalate after (minutes)"
+									fullWidth
+									error={!!fieldState.error}
+									helperText={fieldState.error?.message ?? ""}
+									inputProps={{
+										style: {
+											MozAppearance: "textfield",
+											WebkitAppearance: "none",
+										},
+									}}
+									sx={{
+										"& input[type=number]": {
+											MozAppearance: "textfield",
+											"&::-webkit-outer-spin-button, &::-webkit-inner-spin-button": {
+												WebkitAppearance: "none",
+												margin: 0,
+											},
+										},
+									}}
+								/>
+							)}
+						/>
+
+						{/* Escalation notification channels */}
+						<Stack spacing={theme.spacing(SPACING.SM)}>
+							<Typography
+								variant="h6"
+								sx={{ fontSize: "0.875rem", fontWeight: 500, color: "text.secondary" }}
+							>
+								Escalation notification channels
+							</Typography>
+							<Controller
+								name="escalationNotifications"
+								control={control}
+								render={({ field }) => {
+									// Map notifications to have 'name' property for Autocomplete
+									const notificationOptions = (notifications ?? []).map((n) => ({
+										...n,
+										name: n.notificationName,
+									}));
+									const selectedNotifications = notificationOptions.filter((n) =>
+										(field.value ?? []).includes(n.id)
+									);
+									return (
+										<Stack spacing={theme.spacing(LAYOUT.MD)}>
+											<Autocomplete
+												multiple
+												options={notificationOptions}
+												value={selectedNotifications}
+												getOptionLabel={(option) => option.name}
+												onChange={(_: unknown, newValue: typeof notificationOptions) => {
+													field.onChange(newValue.map((n) => n.id));
+												}}
+												isOptionEqualToValue={(option, value) => option.id === value.id}
+											/>
+											{selectedNotifications.length > 0 && (
+												<Stack
+													flex={1}
+													width="100%"
+												>
+													{selectedNotifications.map((notification, index) => (
+														<Stack
+															direction="row"
+															alignItems="center"
+															key={notification.id}
+															width="100%"
+														>
+															<Typography flexGrow={1}>
+																{notification.notificationName}
+															</Typography>
+															<IconButton
+																size="small"
+																onClick={() => {
+																	field.onChange(
+																		(field.value ?? []).filter(
+																			(id: string) => id !== notification.id
+																		)
+																	);
+																}}
+																aria-label="Remove notification"
+															>
+																<Trash2 size={16} />
+															</IconButton>
+															{index < selectedNotifications.length - 1 && <Divider />}
+														</Stack>
+													))}
+												</Stack>
+											)}
+										</Stack>
+									);
+								}}
+							/>
+						</Stack>
+					</Stack>
+				}
+			/>
+
 			{(watchedType === "http" ||
 				watchedType === "grpc" ||
 				watchedType === "websocket") && (
