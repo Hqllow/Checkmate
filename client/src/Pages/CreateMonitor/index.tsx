@@ -161,6 +161,33 @@ const getGeneralSettingsConfig = (
 	return configs[type] || configs.http;
 };
 
+const normalizeEscalationNotificationDelays = (
+	escalationNotifications: string[] = [],
+	escalationNotificationDelays: Array<{ notificationId: string; delay: number }> = [],
+	fallbackDelay: number = 3
+) => {
+	const selectedNotificationIds = Array.from(new Set(escalationNotifications));
+	const normalizedFallbackDelay =
+		Number.isFinite(fallbackDelay) && fallbackDelay > 0 ? fallbackDelay : 3;
+	const storedDelays = new Map<string, number>();
+
+	escalationNotificationDelays.forEach((item) => {
+		if (!item?.notificationId || !selectedNotificationIds.includes(item.notificationId)) {
+			return;
+		}
+
+		const parsedDelay = Number(item.delay);
+		if (Number.isFinite(parsedDelay) && parsedDelay > 0) {
+			storedDelays.set(item.notificationId, parsedDelay);
+		}
+	});
+
+	return selectedNotificationIds.map((notificationId) => ({
+		notificationId,
+		delay: storedDelays.get(notificationId) ?? normalizedFallbackDelay,
+	}));
+};
+
 const CreateMonitorPage = () => {
 	const theme = useTheme();
 	const { t } = useTranslation();
@@ -202,13 +229,15 @@ const CreateMonitorPage = () => {
 		resolver: zodResolver(schema),
 		defaultValues: defaults,
 	});
-	const { control, watch, handleSubmit, clearErrors } = form;
+	const { control, watch, handleSubmit, clearErrors, setValue, getValues } = form;
 
 	useEffect(() => {
 		form.reset(defaults);
 	}, [defaults, form]);
 
 	const watchedType = watch("type") as MonitorType;
+	const watchedEscalationDelay = watch("escalationDelay") as number | undefined;
+	const watchedEscalationNotificationDelays = watch("escalationNotificationDelays") ?? [];
 
 	const watchedUseAdvancedMatching = watch("useAdvancedMatching") as boolean;
 	const watchGeoCheckEnabled = watch("geoCheckEnabled") as boolean;
@@ -252,11 +281,25 @@ const CreateMonitorPage = () => {
 	};
 
 	const onSubmit = async (data: MonitorFormData) => {
+		const normalizedEscalationNotificationDelays = normalizeEscalationNotificationDelays(
+			data.escalationNotifications ?? [],
+			data.escalationNotificationDelays ?? [],
+			data.escalationDelay ?? 3
+		);
+
+		const payload: MonitorFormData = {
+			...data,
+			escalationNotifications: normalizedEscalationNotificationDelays.map(
+				(item) => item.notificationId
+			),
+			escalationNotificationDelays: normalizedEscalationNotificationDelays,
+		};
+
 		let result;
 		if (isEditMode && monitorId) {
-			result = await patch(`/monitors/${monitorId}`, data);
+			result = await patch(`/monitors/${monitorId}`, payload);
 		} else {
-			result = await post("/monitors", data);
+			result = await post("/monitors", payload);
 		}
 
 		if (result?.success) {
@@ -818,14 +861,27 @@ const CreateMonitorPage = () => {
 								name="escalationNotifications"
 								control={control}
 								render={({ field }) => {
-									// Map notifications to have 'name' property for Autocomplete
 									const notificationOptions = (notifications ?? []).map((n) => ({
 										...n,
 										name: n.notificationName,
 									}));
-									const selectedNotifications = notificationOptions.filter((n) =>
-										(field.value ?? []).includes(n.id)
+									const selectedNotifications = (field.value ?? [])
+										.map((id: string) =>
+											notificationOptions.find((notification) => notification.id === id)
+										)
+										.filter(
+											(
+												notification
+											): notification is (typeof notificationOptions)[number] =>
+												Boolean(notification)
+										);
+									const delayByNotificationId = new Map(
+										watchedEscalationNotificationDelays.map((item) => [
+											item.notificationId,
+											item.delay,
+										])
 									);
+
 									return (
 										<Stack spacing={theme.spacing(LAYOUT.MD)}>
 											<Autocomplete
@@ -834,7 +890,27 @@ const CreateMonitorPage = () => {
 												value={selectedNotifications}
 												getOptionLabel={(option) => option.name}
 												onChange={(_: unknown, newValue: typeof notificationOptions) => {
-													field.onChange(newValue.map((n) => n.id));
+													const nextIds = newValue.map((notification) => notification.id);
+													const currentIds = field.value ?? [];
+													const retainedDelays = (
+														getValues("escalationNotificationDelays") ?? []
+													).filter((item) => nextIds.includes(item.notificationId));
+													const newDelays = nextIds
+														.filter((id) => !currentIds.includes(id))
+														.map((notificationId) => ({
+															notificationId,
+															delay: watchedEscalationDelay ?? 3,
+														}));
+
+													setValue(
+														"escalationNotificationDelays",
+														[...retainedDelays, ...newDelays],
+														{
+															shouldDirty: true,
+															shouldValidate: true,
+														}
+													);
+													field.onChange(nextIds);
 												}}
 												isOptionEqualToValue={(option, value) => option.id === value.id}
 											/>
@@ -843,32 +919,56 @@ const CreateMonitorPage = () => {
 													flex={1}
 													width="100%"
 												>
-													{selectedNotifications.map((notification, index) => (
-														<Stack
-															direction="row"
-															alignItems="center"
-															key={notification.id}
-															width="100%"
-														>
-															<Typography flexGrow={1}>
-																{notification.notificationName}
-															</Typography>
-															<IconButton
-																size="small"
-																onClick={() => {
-																	field.onChange(
-																		(field.value ?? []).filter(
-																			(id: string) => id !== notification.id
-																		)
-																	);
-																}}
-																aria-label="Remove notification"
+													{selectedNotifications.map((notification, index) => {
+														const delay =
+															delayByNotificationId.get(notification.id) ??
+															watchedEscalationDelay ??
+															3;
+
+														return (
+															<Stack
+																direction="row"
+																alignItems="center"
+																key={notification.id}
+																width="100%"
 															>
-																<Trash2 size={16} />
-															</IconButton>
-															{index < selectedNotifications.length - 1 && <Divider />}
-														</Stack>
-													))}
+																<Stack flexGrow={1}>
+																	<Typography>{notification.notificationName}</Typography>
+																	<Typography
+																		variant="body2"
+																		color="text.secondary"
+																	>
+																		After {delay} minute{delay === 1 ? "" : "s"}
+																	</Typography>
+																</Stack>
+																<IconButton
+																	size="small"
+																	onClick={() => {
+																		const remainingIds = (field.value ?? []).filter(
+																			(id: string) => id !== notification.id
+																		);
+																		setValue(
+																			"escalationNotificationDelays",
+																			(
+																				getValues("escalationNotificationDelays") ?? []
+																			).filter(
+																				(item) => item.notificationId !== notification.id
+																			),
+																			{
+																				shouldDirty: true,
+																				shouldValidate: true,
+																			}
+																		);
+																		field.onChange(remainingIds);
+																	}}
+																	aria-label="Remove notification"
+																>
+																	<Trash2 size={16} />
+																</IconButton>
+																{index < selectedNotifications.length - 1 && <Divider />}
+															</Stack>
+														);
+													})}
 												</Stack>
 											)}
 										</Stack>

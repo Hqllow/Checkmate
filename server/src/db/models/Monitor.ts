@@ -15,15 +15,30 @@ import type {
 } from "@/types/check.js";
 
 type CheckSnapshotDocument = Omit<CheckSnapshot, "createdAt"> & { createdAt: Date };
+type EscalationNotificationDelayDocument = {
+	notificationId: Types.ObjectId;
+	delay: number;
+};
 
 type MonitorDocumentBase = Omit<
 	Monitor,
-	"id" | "userId" | "teamId" | "notifications" | "escalationNotifications" | "selectedDisks" | "statusWindow" | "recentChecks" | "createdAt" | "updatedAt"
+	| "id"
+	| "userId"
+	| "teamId"
+	| "notifications"
+	| "escalationNotifications"
+	| "escalationNotificationDelays"
+	| "selectedDisks"
+	| "statusWindow"
+	| "recentChecks"
+	| "createdAt"
+	| "updatedAt"
 > & {
 	statusWindow: boolean[];
 	recentChecks: CheckSnapshotDocument[];
 	notifications: Types.ObjectId[];
 	escalationNotifications: Types.ObjectId[];
+	escalationNotificationDelays: EscalationNotificationDelayDocument[];
 	selectedDisks: string[];
 	matchMethod?: MonitorMatchMethod;
 };
@@ -199,6 +214,22 @@ const checkSnapshotSchema = new Schema<CheckSnapshotDocument>(
 	{ _id: false }
 );
 
+const escalationNotificationDelaySchema = new Schema<EscalationNotificationDelayDocument>(
+	{
+		notificationId: {
+			type: Schema.Types.ObjectId,
+			ref: "Notification",
+			required: true,
+		},
+		delay: {
+			type: Number,
+			required: true,
+			min: 1,
+		},
+	},
+	{ _id: false }
+);
+
 const MonitorSchema = new Schema<MonitorDocument>(
 	{
 		userId: {
@@ -291,6 +322,10 @@ const MonitorSchema = new Schema<MonitorDocument>(
 				ref: "Notification",
 			},
 		],
+		escalationNotificationDelays: {
+			type: [escalationNotificationDelaySchema],
+			default: [],
+		},
 		escalationDelay: {
 			type: Number,
 			default: 3,

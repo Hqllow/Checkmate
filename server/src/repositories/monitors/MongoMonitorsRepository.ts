@@ -352,6 +352,19 @@ class MongoMonitorsRepository implements IMonitorsRepository {
 
 		const notificationIds = (doc.notifications ?? []).map((notification) => toStringId(notification));
 		const escalationNotificationIds = (doc.escalationNotifications ?? []).map((notification) => toStringId(notification));
+		const escalationNotificationDelays = (doc.escalationNotificationDelays ?? [])
+			.map((item) => ({
+				notificationId: toStringId(item?.notificationId),
+				delay: item?.delay ?? doc.escalationDelay ?? 3,
+			}))
+			.filter((item) => item.notificationId);
+		const normalizedEscalationNotificationDelays =
+			escalationNotificationDelays.length > 0
+				? escalationNotificationDelays
+				: escalationNotificationIds.map((notificationId) => ({
+						notificationId,
+						delay: doc.escalationDelay ?? 3,
+				  }));
 
 		return {
 			id: toStringId(doc._id),
@@ -376,6 +389,7 @@ class MongoMonitorsRepository implements IMonitorsRepository {
 			uptimePercentage: doc.uptimePercentage ?? undefined,
 			notifications: notificationIds,
 			escalationNotifications: escalationNotificationIds,
+			escalationNotificationDelays: normalizedEscalationNotificationDelays,
 			escalationDelay: doc.escalationDelay ?? 3,
 			secret: doc.secret ?? undefined,
 			cpuAlertThreshold: doc.cpuAlertThreshold,
@@ -414,6 +428,19 @@ class MongoMonitorsRepository implements IMonitorsRepository {
 
 		const notificationIds = (doc.notifications ?? []).map((notification: unknown) => toStringId(notification));
 		const escalationNotificationIds = (doc.escalationNotifications ?? []).map((notification: unknown) => toStringId(notification));
+		const escalationNotificationDelays = (doc.escalationNotificationDelays ?? [])
+			.map((item) => ({
+				notificationId: toStringId(item?.notificationId),
+				delay: item?.delay ?? doc.escalationDelay ?? 3,
+			}))
+			.filter((item) => item.notificationId);
+		const normalizedEscalationNotificationDelays =
+			escalationNotificationDelays.length > 0
+				? escalationNotificationDelays
+				: escalationNotificationIds.map((notificationId) => ({
+						notificationId,
+						delay: doc.escalationDelay ?? 3,
+				  }));
 
 		return {
 			id: toStringId(doc._id),
@@ -438,6 +465,7 @@ class MongoMonitorsRepository implements IMonitorsRepository {
 			uptimePercentage: doc.uptimePercentage ?? undefined,
 			notifications: notificationIds,
 			escalationNotifications: escalationNotificationIds,
+			escalationNotificationDelays: normalizedEscalationNotificationDelays,
 			escalationDelay: doc.escalationDelay ?? 3,
 			secret: doc.secret ?? undefined,
 			cpuAlertThreshold: doc.cpuAlertThreshold,
